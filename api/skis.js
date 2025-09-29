@@ -64,6 +64,10 @@ module.exports = async (req, res) => {
     const baserowApiUrl = `${baseUrl}?${combinedParams}`;
     // --- EINDE CONSTRUCTIE ---
 
+    // *** NIEUWE DEBUG REGEL ***
+    console.log(`DEBUG: Baserow API URL: ${baserowApiUrl}`);
+    // **************************
+
     try {
         const fetchResponse = await fetch(baserowApiUrl, {
             method: 'GET',
