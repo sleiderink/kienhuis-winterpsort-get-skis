@@ -41,28 +41,24 @@ module.exports = async (req, res) => {
         return;
     }
 
-    // Haal de query parameters van de frontend op
-    const { search } = new URL(req.url, `https://${req.headers.host}`);
+    // Haal de query parameters van de frontend op en gebruik URLSearchParams 
+    // om de URL op de meest robuuste manier te construeren.
+    const url = new URL(req.url, `https://${req.headers.host}`);
+    
+    // Initialiseer URLSearchParams met de parameters van de frontend
+    const params = url.searchParams; 
 
-    // --- GEKORRIGEERDE URL CONSTRUCTIE V3 ---
-    // De Baserow URL MOET altijd beginnen met '?' en daarna eventuele frontend parameters toevoegen met '&'.
+    // 3. Baserow-specifieke parameters toevoegen/verzekeren
+    params.set('user_field_names', 'true');
+    
+    // --- GEKORRIGEERDE URL CONSTRUCTIE V4 met URLSearchParams ---
 
     // 1. De basis-API-URL, inclusief de trailing slash.
     const baseUrl = `https://${BASEROW_HOST}/api/database/rows/table/${BASEROW_TABLE_ID}/`;
 
-    // 2. Query parameters van de frontend (search begint met '?'). Verwijder de beginnende '?'
-    let frontendParams = search.length > 0 ? search.substring(1) : '';
-
-    // 3. Baserow-specifieke parameters
-    const baserowParams = 'user_field_names=true';
-    
-    // 4. Bouw de uiteindelijke URL
-    let baserowApiUrl = `${baseUrl}?${baserowParams}`;
-
-    // Als er parameters van de frontend zijn (filters), voeg deze dan toe met een &
-    if (frontendParams.length > 0) {
-        baserowApiUrl += `&${frontendParams}`;
-    }
+    // 2. Bouw de uiteindelijke URL
+    // params.toString() zorgt voor de correcte scheiding met '?' of '&' en is betrouwbaarder dan handmatige stringopbouw.
+    const baserowApiUrl = `${baseUrl}?${params.toString()}`;
     // --- EINDE CONSTRUCTIE ---
 
     // *** DEBUG REGEL ***
