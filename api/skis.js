@@ -6,12 +6,13 @@
  *
  * Configuratie vereist in Vercel Environment Variables:
  * - BASEROW_TOKEN: Uw Baserow Database Token
- * - BASEROW_HOST: De hostnaam (bijv. 'baserow.io')
+ * - BASEROW_HOST: De hostnaam (standaard: 'api.baserow.io', kan overschreven worden)
  */
 module.exports = async (req, res) => {
     // Lees beveiligde omgevingsvariabelen
     const BASEROW_TOKEN = process.env.BASEROW_TOKEN;
-    const BASEROW_HOST = process.env.BASEROW_HOST || 'baserow.io';
+    // Gebruik 'api.baserow.io' als standaard host als de variabele niet is ingesteld
+    const BASEROW_HOST = process.env.BASEROW_HOST || 'api.baserow.io';
     // Uw vaste Tabel ID
     const BASEROW_TABLE_ID = '688701';
 
