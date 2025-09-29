@@ -47,25 +47,40 @@ module.exports = async (req, res) => {
         });
 
         if (!response.ok) {
-            // VERBETERDE FOUTAFHANDELING: Probeer de foutmelding van Baserow te extraheren
-            let errorBody = 'Onbekende API Fout';
+            // FIX: Maak een kloon van de respons voordat we de body lezen in het geval van een fout.
+            // Dit zorgt ervoor dat de stream maar één keer wordt geconsumeerd in de code.
+            const clonedResponse = response.clone();
+            
+            // VERBETERDE FOUTAFHANDELING: Lees de body van de kloon als tekst en probeer dan te parsen.
+            let errorBodyDetails = 'Geen foutdetails ontvangen.';
+            
             try {
-                errorBody = await response.json();
-                errorBody = JSON.stringify(errorBody).substring(0, 100);
-            } catch (e) {
-                // Val terug op ruwe tekst als JSON parsing mislukt
-                errorBody = (await response.text()).substring(0, 100);
+                // Lees de stream slechts één keer
+                const rawText = await clonedResponse.text();
+                
+                // Probeer de tekst als JSON te parsen voor nette foutdetails
+                try {
+                    const parsedJson = JSON.parse(rawText);
+                    errorBodyDetails = JSON.stringify(parsedJson).substring(0, 100);
+                } catch (jsonError) {
+                    // Als het geen JSON is, gebruik de ruwe tekst
+                    errorBodyDetails = rawText.substring(0, 100);
+                }
+            } catch (readError) {
+                console.error('Fout bij het lezen van de foutbody zelf:', readError.message);
+                errorBodyDetails = `Kon foutdetails niet lezen: ${readError.message}`;
             }
             
-            console.error(`Fout bij Baserow oproep: Status ${response.status}`, errorBody);
+            console.error(`Fout bij Baserow oproep: Status ${response.status}`, errorBodyDetails);
             
             return res.status(response.status).json({ 
-                error: `Fout bij Baserow API-oproep (HTTP ${response.status}). Controleer Vercel BASEROW_TOKEN of BASEROW_HOST.`,
-                details: errorBody
+                error: `Fout bij Baserow API-oproep (HTTP ${response.status}). Controleer Vercel BASEROW_TOKEN of Baserow configuratie.`,
+                details: errorBodyDetails
             });
         }
         
-        const data = await response.json();
+        // Alleen in het succesvolle pad de body lezen
+        const data = await response.json(); 
         
         // Baserow retourneert de rijen onder de sleutel 'results'. 
         // We geven alleen de array met data terug aan de frontend.
