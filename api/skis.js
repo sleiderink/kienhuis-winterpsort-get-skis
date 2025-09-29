@@ -44,29 +44,30 @@ module.exports = async (req, res) => {
     // Haal de query parameters van de frontend op
     const { search } = new URL(req.url, `https://${req.headers.host}`);
 
-    // --- GEKORRIGEERDE URL CONSTRUCTIE ---
-    // Dit lost de 404 URL_NOT_FOUND op door de juiste Baserow API structuur te garanderen:
-    // https://[HOST]/api/database/rows/table/[ID]/?param1=value1&param2=value2
-    
-    // 1. De basis-API-URL, inclusief de trailing slash die Baserow verwacht.
+    // --- GEKORRIGEERDE URL CONSTRUCTIE V3 ---
+    // De Baserow URL MOET altijd beginnen met '?' en daarna eventuele frontend parameters toevoegen met '&'.
+
+    // 1. De basis-API-URL, inclusief de trailing slash.
     const baseUrl = `https://${BASEROW_HOST}/api/database/rows/table/${BASEROW_TABLE_ID}/`;
 
     // 2. Query parameters van de frontend (search begint met '?'). Verwijder de beginnende '?'
-    const frontendParams = search.length > 0 ? search.substring(1) : '';
+    let frontendParams = search.length > 0 ? search.substring(1) : '';
 
     // 3. Baserow-specifieke parameters
     const baserowParams = 'user_field_names=true';
+    
+    // 4. Bouw de uiteindelijke URL
+    let baserowApiUrl = `${baseUrl}?${baserowParams}`;
 
-    // 4. Combineer de parameters met '&' als scheidingsteken
-    const combinedParams = [frontendParams, baserowParams].filter(p => p.length > 0).join('&');
-
-    // 5. De uiteindelijke URL
-    const baserowApiUrl = `${baseUrl}?${combinedParams}`;
+    // Als er parameters van de frontend zijn (filters), voeg deze dan toe met een &
+    if (frontendParams.length > 0) {
+        baserowApiUrl += `&${frontendParams}`;
+    }
     // --- EINDE CONSTRUCTIE ---
 
-    // *** NIEUWE DEBUG REGEL ***
+    // *** DEBUG REGEL ***
     console.log(`DEBUG: Baserow API URL: ${baserowApiUrl}`);
-    // **************************
+    // *******************
 
     try {
         const fetchResponse = await fetch(baserowApiUrl, {
