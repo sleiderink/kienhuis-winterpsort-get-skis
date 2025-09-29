@@ -46,7 +46,12 @@ module.exports = async (req, res) => {
     const { pathname, search } = new URL(req.url, `https://${req.headers.host}`);
 
     // Bouw de Baserow API URL
-    const baserowApiUrl = `https://${BASEROW_HOST}/api/database/rows/table/${BASEROW_TABLE_ID}/${search}&user_field_names=true`;
+    // Oude URL-constructie gaf een onjuiste URL (met een extra '/') wat resulteerde in een 404 fout.
+    // Nieuwe constructie zorgt ervoor dat query-parameters correct worden toegevoegd.
+    const hasExistingParams = search.length > 0;
+    const separator = hasExistingParams ? '&' : '?';
+    
+    const baserowApiUrl = `https://${BASEROW_HOST}/api/database/rows/table/${BASEROW_TABLE_ID}${search}${separator}user_field_names=true`;
 
     try {
         const fetchResponse = await fetch(baserowApiUrl, {
