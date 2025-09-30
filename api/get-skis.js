@@ -5,47 +5,47 @@ module.exports = async (request, response) => {
     // 1. Load environment variables securely from Vercel settings
     const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY;
     const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
-    // NOTE: Replace 'Skis' if your table name is different
-    const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME || 'Skis'; 
+    const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME || 'Skis'; // Use 'Skis' or your specific table name
 
     // Set CORS headers for security and to allow the Webflow domain to access the API
-    response.setHeader('Access-Control-Allow-Origin', '*'); // Allows all origins, but can be restricted to your Webflow domain
+    response.setHeader('Access-Control-Allow-Origin', '*'); 
     response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (request.method === 'OPTIONS') {
-        // Handle CORS preflight requests
         response.status(200).end();
         return;
     }
 
-    // Input validation
+    // Input validation for credentials
     if (!AIRTABLE_API_KEY || !AIRTABLE_BASE_ID) {
         return response.status(500).json({ 
             error: "Airtable credentials not configured. Please set AIRTABLE_API_KEY and AIRTABLE_BASE_ID in Vercel Environment Variables." 
         });
     }
 
-    // 2. Extract query parameters from the frontend (Webflow)
-    const { gender, ability, piste } = request.query;
+    // 2. Extract all 6 query parameters from the frontend
+    // NOTE: Frontend parameters: gender, level, piste, speed, turns, price
+    const { gender, level, piste, speed, turns, price } = request.query;
 
-    if (!gender || !ability || !piste) {
+    // Validation for user input
+    if (!gender || !level || !piste || !speed || !turns || !price) {
         return response.status(400).json({ 
-            error: "Missing required query parameters: gender, ability, and piste are required." 
+            error: "Ontbrekende filters: Zorg ervoor dat stap 1 t/m 6 (Geslacht, Niveau, Piste, Snelheid, Bochten, Prijs) volledig zijn ingevuld." 
         });
     }
 
     // 3. Construct the Airtable API URL and Filter Formula
     const AIRTABLE_URL = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`;
 
-    // Filter formula to fetch records matching the criteria (Gender, Ability, Piste)
-    // The Airtable formula uses the fields exactly as named in your base
-    const filterFormula = `AND({Gender} = '${gender}', {Ability} = '${ability}', {Piste} = '${piste}')`;
+    // BELANGRIJK: De veldnamen in de formule zijn nu afgestemd op de door u verstrekte namen: 
+    // {Gender}, {Ability}, {Piste}, {Snelheid}, {Bochten}, {Verkoopprijs}
+    const filterFormula = 
+        `AND({Gender} = '${gender}', {Ability} = '${level}', {Piste} = '${piste}', {Snelheid} = '${speed}', {Bochten} = '${turns}', {Verkoopprijs} = '${price}')`;
 
     const searchParams = new URLSearchParams({
         filterByFormula: filterFormula,
-        // Max records per page is 100, which should be sufficient
-        maxRecords: 100, 
+        maxRecords: 100, // Maximaal aantal records om op te halen
     }).toString();
     
     const urlWithParams = `${AIRTABLE_URL}?${searchParams}`;
@@ -62,19 +62,10 @@ module.exports = async (request, response) => {
 
         if (!airtableResponse.ok) {
             const errorBody = await airtableResponse.json().catch(() => ({}));
-            const status = airtableResponse.status;
             
-            // Log the error details and return a generic error message for security
-            console.error('Airtable API Error:', status, errorBody);
+            let errorMessage = `Airtable oproep mislukt (Status: ${airtableResponse.status}). Controleer de veldnamen in Airtable en Vercel variabelen.`;
             
-            let errorMessage = `Airtable oproep mislukt. Status: ${status}.`;
-            if (status === 401) {
-                errorMessage = 'Autorisatiefout. Controleer de AIRTABLE_API_KEY in Vercel.';
-            } else if (status === 404) {
-                 errorMessage = 'Resource niet gevonden. Controleer AIRTABLE_BASE_ID of AIRTABLE_TABLE_NAME in Vercel.';
-            }
-
-            return response.status(status).json({ 
+            return response.status(airtableResponse.status).json({ 
                 error: errorMessage,
                 details: errorBody 
             });
