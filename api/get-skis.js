@@ -1,113 +1,96 @@
-/**
- * Vercel Serverless Function (Proxy) voor Baserow
- *
- * Deze functie beveiligt de Baserow Token en fungeert als een veilige
- * tussenpersoon tussen de Webflow frontend en de Baserow API.
- *
- * Configuratie vereist in Vercel Environment Variables:
- * - BASEROW_TOKEN: Uw Baserow Database Token
- * - BASEROW_HOST: De hostnaam (standaard: 'api.baserow.io', kan overschreven worden)
- */
-module.exports = async (req, res) => {
-    // Lees beveiligde omgevingsvariabelen
-    const BASEROW_TOKEN = process.env.BASEROW_TOKEN;
-    // Gebruik 'api.baserow.io' als standaard host als de variabele niet is ingesteld
-    const BASEROW_HOST = process.env.BASEROW_HOST || 'api.baserow.io';
-    // Uw vaste Tabel ID
-    const BASEROW_TABLE_ID = '688701';
+// Vercel Serverless Function to securely proxy requests to Airtable
+// This function must be placed in the `api/` directory (e.g., api/get-skis.js)
 
-    // 1. Veiligheidscontrole: Is het token ingesteld?
-    if (!BASEROW_TOKEN) {
-        // Log de fout en geef een duidelijke melding aan de client
-        console.error("Fout: BASEROW_TOKEN is niet geconfigureerd in Vercel.");
-        res.status(500).json({
-            error: "Baserow Token is niet geconfigureerd in Vercel omgevingsvariabelen."
+module.exports = async (request, response) => {
+    // 1. Load environment variables securely from Vercel settings
+    const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY;
+    const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
+    // NOTE: Replace 'Skis' if your table name is different
+    const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME || 'Skis'; 
+
+    // Set CORS headers for security and to allow the Webflow domain to access the API
+    response.setHeader('Access-Control-Allow-Origin', '*'); // Allows all origins, but can be restricted to your Webflow domain
+    response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (request.method === 'OPTIONS') {
+        // Handle CORS preflight requests
+        response.status(200).end();
+        return;
+    }
+
+    // Input validation
+    if (!AIRTABLE_API_KEY || !AIRTABLE_BASE_ID) {
+        return response.status(500).json({ 
+            error: "Airtable credentials not configured. Please set AIRTABLE_API_KEY and AIRTABLE_BASE_ID in Vercel Environment Variables." 
         });
-        return;
     }
 
-    // Alleen GET-aanvragen zijn toegestaan
-    if (req.method === 'OPTIONS') {
-        // Preflight request voor CORS
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-        res.status(204).end();
-        return;
+    // 2. Extract query parameters from the frontend (Webflow)
+    const { gender, ability, piste } = request.query;
+
+    if (!gender || !ability || !piste) {
+        return response.status(400).json({ 
+            error: "Missing required query parameters: gender, ability, and piste are required." 
+        });
     }
 
-    if (req.method !== 'GET') {
-        res.status(405).json({ error: 'Alleen GET-aanvragen zijn toegestaan.' });
-        return;
-    }
+    // 3. Construct the Airtable API URL and Filter Formula
+    const AIRTABLE_URL = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`;
 
-    // Haal de query parameters van de frontend op en gebruik URLSearchParams 
-    // om de URL op de meest robuuste manier te construeren.
-    const url = new URL(req.url, `https://${req.headers.host}`);
+    // Filter formula to fetch records matching the criteria (Gender, Ability, Piste)
+    // The Airtable formula uses the fields exactly as named in your base
+    const filterFormula = `AND({Gender} = '${gender}', {Ability} = '${ability}', {Piste} = '${piste}')`;
+
+    const searchParams = new URLSearchParams({
+        filterByFormula: filterFormula,
+        // Max records per page is 100, which should be sufficient
+        maxRecords: 100, 
+    }).toString();
     
-    // Initialiseer URLSearchParams met de parameters van de frontend
-    const params = url.searchParams; 
-
-    // 3. Baserow-specifieke parameters toevoegen/verzekeren
-    params.set('user_field_names', 'true');
-    
-    // --- GEKORRIGEERDE URL CONSTRUCTIE V4 met URLSearchParams ---
-
-    // 1. De basis-API-URL, inclusief de trailing slash.
-    const baseUrl = `https://${BASEROW_HOST}/api/database/rows/table/${BASEROW_TABLE_ID}/`;
-
-    // 2. Bouw de uiteindelijke URL
-    // params.toString() zorgt voor de correcte scheiding met '?' of '&' en is betrouwbaarder dan handmatige stringopbouw.
-    const baserowApiUrl = `${baseUrl}?${params.toString()}`;
-    // --- EINDE CONSTRUCTIE ---
-
-    // *** DEBUG REGEL ***
-    console.log(`DEBUG: Baserow API URL: ${baserowApiUrl}`);
-    // *******************
+    const urlWithParams = `${AIRTABLE_URL}?${searchParams}`;
 
     try {
-        const fetchResponse = await fetch(baserowApiUrl, {
+        // 4. Call Airtable API securely using the environment variable
+        const airtableResponse = await fetch(urlWithParams, {
             method: 'GET',
             headers: {
-                'Authorization': `Token ${BASEROW_TOKEN}`,
-                'Content-Type': 'application/json',
-            },
+                'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
         });
 
-        // Controleer of de API-aanroep succesvol was (status 200)
-        if (!fetchResponse.ok) {
-            // BELANGRIJK: Clone de response zodat we de body kunnen lezen voor foutdetails.
-            const errorResponse = fetchResponse.clone();
-            let errorDetails = `Baserow fout (HTTP ${fetchResponse.status})`;
-
-            try {
-                // Probeer de JSON-foutdetails van Baserow te lezen
-                const errorJson = await errorResponse.json();
-                errorDetails += `: ${JSON.stringify(errorJson)}`;
-            } catch (e) {
-                // Als het geen JSON is, lees dan de tekst
-                const errorText = await errorResponse.text();
-                errorDetails += `: ${errorText.substring(0, 100)}`; // Beperk de lengte
+        if (!airtableResponse.ok) {
+            const errorBody = await airtableResponse.json().catch(() => ({}));
+            const status = airtableResponse.status;
+            
+            // Log the error details and return a generic error message for security
+            console.error('Airtable API Error:', status, errorBody);
+            
+            let errorMessage = `Airtable oproep mislukt. Status: ${status}.`;
+            if (status === 401) {
+                errorMessage = 'Autorisatiefout. Controleer de AIRTABLE_API_KEY in Vercel.';
+            } else if (status === 404) {
+                 errorMessage = 'Resource niet gevonden. Controleer AIRTABLE_BASE_ID of AIRTABLE_TABLE_NAME in Vercel.';
             }
 
-            console.error(`Baserow API Fout: ${errorDetails}`);
-            res.status(fetchResponse.status).json({
-                error: `Serverfout (Baserow): ${errorDetails}`
+            return response.status(status).json({ 
+                error: errorMessage,
+                details: errorBody 
             });
-            return;
         }
 
-        // Lees de data van Baserow en geef deze direct door
-        const data = await fetchResponse.json();
+        const airtableData = await airtableResponse.json();
 
-        // Stuur de data terug naar de frontend met correcte CORS-headers
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.status(200).json(data);
+        // 5. Return filtered data back to the Webflow frontend
+        return response.status(200).json({
+            skis: airtableData.records || []
+        });
 
     } catch (error) {
-        console.error('Netwerkfout in Vercel Function:', error);
-        res.status(500).json({
-            error: `Serverfout (Netwerk/Code): ${error.message}`
+        console.error('Server Proxy Error:', error);
+        return response.status(500).json({ 
+            error: `Interne serverfout bij communicatie met Airtable: ${error.message}` 
         });
     }
 };
