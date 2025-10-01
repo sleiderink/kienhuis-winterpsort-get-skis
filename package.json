@@ -2,7 +2,7 @@
   "name": "Chain-Digital",
   "version": "1.0.0",
   "description": "Vercel Function for ski finder.",
-  "main": "api/skis.js",
+  "main": "api/get-skis.js",
   "scripts": {
     "start": "vercel dev"
   },
