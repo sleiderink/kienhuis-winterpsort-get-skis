@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/skis",
-      "destination": "/api/skis"
+      "source": "/api/get-skis",
+      "destination": "/api/get-skis"
     }
   ],
   "headers": [
